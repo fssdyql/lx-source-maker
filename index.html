@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>LX 聚合源服务器 (Source Maker)</title>
+  <style>
+    :root { 
+      --bg: #0b0c10; --panel: #14161a; --surface: #1f232b; 
+      --text: #e2e8f0; --text-muted: #8b949e; --accent: #3b82f6; 
+      --success: #10b981; --warn: #f59e0b; --danger: #ef4444; 
+      --border: #2a2e37;
+    }
+    * { box-sizing: border-box; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, system-ui, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #3a3f4b; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #4b5263; }
+
+    #dropzone { position: fixed; inset: 0; background: rgba(11, 12, 16, 0.85); border: 3px dashed var(--accent); z-index: 9999; display: none; align-items: center; justify-content: center; font-size: 2rem; color: var(--accent); backdrop-filter: blur(8px); pointer-events: none; }
+    body.dragover #dropzone { display: flex; }
+
+    .header { padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; z-index: 10; }
+    .header h2 { margin: 0; font-size: 1.1rem; display: flex; align-items: center; gap: 10px; }
+    .toolbar { display: flex; gap: 12px; align-items: center; }
+    .input-group { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text-muted); background: var(--surface); padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border); }
+    .input-group input, .input-group select { background: transparent; color: var(--text); border: none; outline: none; font-family: monospace; }
+    
+    button { background: var(--surface); color: var(--text); border: 1px solid var(--border); padding: 6px 14px; border-radius: 6px; cursor: pointer; transition: 0.2s; font-size: 0.85rem; font-weight: bold; }
+    button:hover { background: #2a2e37; }
+    button.primary { background: var(--accent); color: #fff; border: none; }
+    button.primary:hover { background: #2563eb; }
+    button.danger { background: var(--danger); color: #fff; border: none; }
+
+    .main { display: flex; flex: 1; overflow: hidden; }
+    .sidebar { width: 280px; background: var(--panel); display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+    .section-header { padding: 10px 14px; background: rgba(0,0,0,0.2); font-size: 0.85rem; font-weight: bold; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); }
+    .list-view { flex: 1; overflow-y: auto; padding: 10px; }
+    
+    .card { background: var(--surface); padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 0.8rem; border: 1px solid var(--border); position: relative; }
+    .card h4 { margin: 0 0 8px 0; font-size: 0.9rem; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 40px;}
+    .card .delete-btn { position: absolute; top: 10px; right: 10px; background: transparent; color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); padding: 2px 6px; font-size: 0.7rem; border-radius: 4px; cursor: pointer;}
+
+    .content-area { flex: 1; display: flex; flex-direction: column; background: var(--bg); overflow: hidden; }
+    .table-container { flex: 1; overflow: auto; }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.8rem; table-layout: fixed; }
+    th { background: rgba(31, 35, 43, 0.95); padding: 10px; text-align: left; position: sticky; top: 0; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+    td { padding: 10px; border-bottom: 1px solid #1a1d24; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
+    tr:hover td { background: #181b21; }
+    
+    .terminal-container { height: 220px; background: #0a0a0c; display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+    .log-panel { flex: 1; overflow-y: auto; padding: 10px 16px; font-family: 'Consolas', monospace; font-size: 0.8rem; line-height: 1.6; }
+    .log-time { color: #5c6370; margin-right: 8px; }
+    .log-info { color: #abb2bf; } .log-warn { color: #d19a66; } .log-error { color: #e06c75; } .log-success { color: #98c379; }
+    
+    .badge { padding: 3px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; }
+    .badge.success { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+    .badge.danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+  </style>
+</head>
+<body>
+  <div id="dropzone">📦 释放 .js 脚本文件</div>
+
+  <div class="header">
+    <h2>🎵 LX 源聚合服务器</h2>
+    <div class="toolbar">
+      <div class="input-group">
+        IP: <input type="text" id="serverIp" value="127.0.0.1" style="width: 110px;">
+      </div>
+      <div class="input-group">
+        端口: <input type="number" id="serverPort" value="3000" style="width: 60px;">
+      </div>
+      <div class="input-group">
+        模式: 
+        <select id="serverMode">
+          <option value="speed">🚀 速度优先 (最快响应)</option>
+          <option value="quality">💎 音质优先 (最高画质/音质)</option>
+        </select>
+      </div>
+      <button id="serverBtn" class="primary" onclick="toggleServer()">▶ 启动服务器</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="sidebar">
+      <div class="section-header"><span>已加载数据源</span></div>
+      <div class="list-view" id="scriptsList">
+        <div style="color:#666;text-align:center;margin-top:30px;font-size:0.9rem;">请拖入 .js 脚本</div>
+      </div>
+    </div>
+    
+    <div class="content-area">
+      <div class="section-header" style="background:var(--panel);">
+        <span>LX 客户端请求监控 (Server Logs)</span>
+        <button onclick="document.querySelector('#logTable tbody').innerHTML=''" style="padding:2px 8px;font-size:0.75rem;">清空列表</button>
+      </div>
+      <div class="table-container">
+        <table id="logTable">
+          <thead>
+            <tr>
+              <th style="width: 80px;">时间</th>
+              <th style="width: 60px;">平台</th>
+              <th style="width: 60px;">操作</th>
+              <th style="width: 160px;">歌曲名</th>
+              <th style="width: 70px;">需求</th>
+              <th style="width: 70px;">实际</th>
+              <th style="width: 120px;">命中源插件</th>
+              <th style="width: 60px;">延迟</th>
+              <th style="width: 60px;">状态</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="terminal-container">
+        <div class="section-header"><span>系统终端</span><button style="padding:2px 8px;font-size:0.75rem;" onclick="document.getElementById('terminalBox').innerHTML=''">清空</button></div>
+        <div class="log-panel" id="terminalBox"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    let isServerRunning = false;
+
+    document.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('dragover'); });
+    document.addEventListener('dragleave', e => { e.preventDefault(); document.body.classList.remove('dragover'); });
+document.addEventListener('drop', async e => {
+      e.preventDefault(); document.body.classList.remove('dragover');
+      for (let f of e.dataTransfer.files) {
+        if (f.name.endsWith('.js')) {
+          const code = await f.text();
+          const id = 'script_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+          ipcRenderer.send('run-script', id, f.name, code);
+        }
+      }
+    });
+
+    function toggleServer() {
+      const btn = document.getElementById('serverBtn');
+      if (!isServerRunning) {
+        let ip = document.getElementById('serverIp').value || '127.0.0.1';
+        let port = parseInt(document.getElementById('serverPort').value) || 3000;
+        let mode = document.getElementById('serverMode').value;
+        ipcRenderer.send('start-server', ip, port, mode);
+        btn.innerHTML = "⏹ 停止服务器"; btn.className = "danger";
+        isServerRunning = true;
+      } else {
+        ipcRenderer.send('stop-server');
+        btn.innerHTML = "▶ 启动服务器"; btn.className = "primary";
+        isServerRunning = false;
+      }
+    }
+
+    ipcRenderer.on('update-scripts', (e, scripts) => {
+      const c = document.getElementById('scriptsList');
+      if (scripts.length === 0) return c.innerHTML = '<div style="color:#666;text-align:center;margin-top:30px;">无数据源</div>';
+      c.innerHTML = scripts.map(s => `
+        <div class="card">
+          <h4>${s.name}</h4>
+          <div>${s.sources.map(src => `<span style="background:rgba(59,130,246,0.15);color:var(--accent);padding:2px 6px;border-radius:4px;margin-right:4px;font-size:10px;">${src.toUpperCase()}</span>`).join('')}</div>
+          <button class="delete-btn" onclick="ipcRenderer.send('destroy-script', '${s.id}'); this.parentElement.remove();">卸载</button>
+        </div>
+      `).join('');
+    });
+
+    ipcRenderer.on('log', (e, msg, type) => {
+      const box = document.getElementById('terminalBox');
+      const time = new Date().toLocaleTimeString();
+      box.innerHTML += `<div><span class="log-time">[${time}]</span><span class="log-${type}">${msg}</span></div>`;
+      box.scrollTop = box.scrollHeight;
+    });
+
+    ipcRenderer.on('request-record', (e, req) => {
+      const tbody = document.querySelector('#logTable tbody');
+      const bClass = req.status === '成功' ? 'success' : 'danger';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="color:var(--text-muted)">${req.time}</td>
+        <td><span style="background:#2a2e37;padding:2px 6px;border-radius:4px;">${req.source.toUpperCase()}</span></td>
+        <td style="color:#a855f7">${req.action}</td>
+        <td title="${req.songName}">${req.songName}</td>
+        <td style="color:var(--text-muted)">${req.targetQ}</td>
+        <td style="color:var(--accent);font-weight:bold;">${req.usedQuality}</td>
+        <td title="${req.pluginName}">${req.pluginName}</td>
+        <td style="font-family:monospace">${req.latency}ms</td>
+        <td><span class="badge ${bClass}">${req.status}</span></td>
+      `;
+      tbody.prepend(tr);
+      if (tbody.children.length > 500) tbody.removeChild(tbody.lastChild);
+    });
+  </script>
+</body>
+</html>
